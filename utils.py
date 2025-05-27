@@ -202,3 +202,32 @@ def atualizar_dados_certificados(driver, url, coluna_destino):
 
     except Exception as e:
         print(f"❌ Erro ao atualizar os dados de certificados: {e}")
+
+
+def atualizar_dados_inscritos(driver):
+    urls_inscritos = {
+        'B2': 'https://eadoticsrio.com.br/user/index.php?id=5',  # Básico
+        'C2': 'https://eadoticsrio.com.br/user/index.php?id=4',  # Intermediário
+        'D2': 'https://eadoticsrio.com.br/user/index.php?id=2',  # Avançado
+    }
+
+    try:
+        aba_total = conectar_planilha("Total")
+        for celula, url in urls_inscritos.items():
+            driver.get(url)
+            time.sleep(2)
+
+            link_elemento = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "a[data-action='showcount']"))
+            )
+            texto = link_elemento.text  # Ex: "Mostrar todos os 86"
+            match = re.search(r'Mostrar todos os (\d+)', texto)
+            if match:
+                total = int(match.group(1))
+                aba_total.update(celula, [[total]])
+                print(f"✅ Número de inscritos atualizado na célula {celula}: {total}")
+            else:
+                print(f"⚠️ Não foi possível extrair o número de inscritos da URL {url}")
+
+    except Exception as e:
+        print(f"❌ Erro ao atualizar dados de inscritos: {e}")

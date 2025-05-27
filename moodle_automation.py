@@ -9,7 +9,8 @@ from time import sleep
 from utils import (
     ler_planilha, enviar_email, atualizar_coluna_nada_para_plataforma,
     conectar_planilha, formatar_username, registrar_status_usuario,
-    matricular_usuario_pelo_nome_do_curso, atualizar_dados_certificados
+    matricular_usuario_pelo_nome_do_curso, atualizar_dados_certificados,
+    atualizar_dados_inscritos
 )
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -75,6 +76,10 @@ if not linhas_atualizadas:
     # Atualiza certificados de todos os cursos
     for coluna, url in urls_certificados.items():
         atualizar_dados_certificados(driver, url, coluna)
+
+        # Atualiza número de inscritos de todos os cursos
+    atualizar_dados_inscritos(driver)
+    
     driver.quit()
 
     enviar_email(
@@ -232,6 +237,9 @@ for _, row in pendentes.iterrows():
 # Sempre atualiza certificados no final
 for coluna, url in urls_certificados.items():
     atualizar_dados_certificados(driver, url, coluna)
+
+# Atualiza os dados de inscritos nos cursos
+atualizar_dados_inscritos(driver)
 
 driver.quit()
 

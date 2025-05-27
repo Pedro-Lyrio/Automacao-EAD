@@ -6,7 +6,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 import time
 from time import sleep
-from utils import ler_planilha, enviar_email, atualizar_coluna_nada_para_plataforma, conectar_planilha, formatar_username, registrar_status_usuario, matricular_usuario_pelo_nome_do_curso
+from utils import (
+    ler_planilha, enviar_email, atualizar_coluna_nada_para_plataforma,
+    conectar_planilha, formatar_username, registrar_status_usuario,
+    matricular_usuario_pelo_nome_do_curso, atualizar_dados_certificados
+)
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
@@ -17,6 +21,13 @@ prefixo_para_nome_curso = {
     "CIP": "Curso Intermediário de Planilhas",
     "CAP": "Curso Avançado de Planilhas"
 }
+
+urls_certificados = {
+    'B': 'https://eadoticsrio.com.br/mod/customcert/view.php?id=208',  # Básico
+    'C': 'https://eadoticsrio.com.br/mod/customcert/view.php?id=236',  # Intermediário
+    'D': 'https://eadoticsrio.com.br/mod/customcert/view.php?id=42',  # Avançado
+}
+
 
 def gerar_usernames(nome_completo):
     partes = [p.lower() for p in nome_completo.strip().split()]
@@ -38,16 +49,80 @@ aba = conectar_planilha()
 linhas_atualizadas = atualizar_coluna_nada_para_plataforma(aba)
 
 if not linhas_atualizadas:
-    enviar_email(os.getenv("EMAIL_FROM"), os.getenv("EMAIL_PASSWORD"), os.getenv("EMAIL_TO"),
-                 "Automação Moodle - Nenhum novo aluno", "Nenhum novo aluno encontrado.")
+    # Mesmo que não tenha novos alunos, atualiza os certificados.
+    chrome_options = Options()
+    chrome_options.add_argument("--incognito")
+    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.get("https://eadoticsrio.com.br/login/index.php")
+
+    try:
+        WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, "username")))
+        driver.find_element(By.ID, "username").send_keys(os.getenv("MOODLE_USERNAME"))
+        driver.find_element(By.ID, "password").send_keys(os.getenv("MOODLE_PASSWORD"))
+        driver.find_element(By.ID, "loginbtn").click()
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "page-footer")))
+        print("Login realizado com sucesso.")
+    except Exception as e:
+        print("Erro ao tentar fazer login como administrador.", e)
+        driver.save_screenshot("erro_login.png")
+        driver.quit()
+        exit()
+if not linhas_atualizadas:
+    # Atualiza certificados de todos os cursos
+    for coluna, url in urls_certificados.items():
+        atualizar_dados_certificados(driver, url, coluna)
+    driver.quit()
+
+    enviar_email(
+        os.getenv("EMAIL_FROM"),
+        os.getenv("EMAIL_PASSWORD"),
+        os.getenv("EMAIL_TO"),
+        "Automação Moodle - Nenhum novo aluno",
+        "Nenhum novo aluno encontrado."
+    )
     exit()
 
 df = ler_planilha()
 pendentes = df.iloc[[idx - 2 for idx in linhas_atualizadas]].reset_index()
 
 if pendentes.empty:
-    enviar_email(os.getenv("EMAIL_FROM"), os.getenv("EMAIL_PASSWORD"), os.getenv("EMAIL_TO"),
-                 "Automação Moodle - Nenhum novo aluno", "Nenhum novo aluno encontrado.")
+    # Precaução: deveria ser impossível, mas garante robustez.
+    chrome_options = Options()
+    chrome_options.add_argument("--incognito")
+    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.get("https://eadoticsrio.com.br/login/index.php")
+
+    try:
+        WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, "username")))
+        driver.find_element(By.ID, "username").send_keys(os.getenv("MOODLE_USERNAME"))
+        driver.find_element(By.ID, "password").send_keys(os.getenv("MOODLE_PASSWORD"))
+        driver.find_element(By.ID, "loginbtn").click()
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "page-footer")))
+        print("Login realizado com sucesso.")
+    except Exception as e:
+        print("Erro ao tentar fazer login como administrador.", e)
+        driver.save_screenshot("erro_login.png")
+        driver.quit()
+        exit()
+
+    atualizar_dados_certificados(driver)
+    driver.quit()
+
+    enviar_email(
+        os.getenv("EMAIL_FROM"),
+        os.getenv("EMAIL_PASSWORD"),
+        os.getenv("EMAIL_TO"),
+        "Automação Moodle - Nenhum novo aluno",
+        "Nenhum novo aluno encontrado."
+    )
     exit()
 
 chrome_options = Options()
@@ -153,6 +228,12 @@ for _, row in pendentes.iterrows():
                 registrar_status_usuario(nome_completo, email, 'sucesso', 'Aluno matriculado com sucesso.', username=identificador, curso=nome_curso, acao='matricula')
             except Exception as e:
                 registrar_status_usuario(nome_completo, email, 'erro', f"Erro ao matricular no curso: {e}", username=identificador, curso=nome_curso, acao='matricula')
+
+# Sempre atualiza certificados no final
+for coluna, url in urls_certificados.items():
+    atualizar_dados_certificados(driver, url, coluna)
+
+driver.quit()
 
 assunto = "Automação Moodle - Relatório de Execução"
 corpo = "Resumo da criação e matrícula de usuários no Moodle."

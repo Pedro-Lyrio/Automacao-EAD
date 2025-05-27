@@ -34,13 +34,14 @@ load_dotenv()
 # Lista para armazenar status dos usuários
 status_usuarios = []
 
-def conectar_planilha():
+def conectar_planilha(nome_aba="Respostas ao formulário 1"):
     escopo = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     credenciais = ServiceAccountCredentials.from_json_keyfile_name("credenciais.json", escopo)
     cliente = gspread.authorize(credenciais)
     planilha = cliente.open_by_url(os.getenv("SPREADSHEET_URL"))
-    aba = planilha.worksheet("Respostas ao formulário 1")
+    aba = planilha.worksheet(nome_aba)
     return aba
+
 
 def formatar_username(nome_completo):
     nome_completo = unicodedata.normalize('NFKD', nome_completo).encode('ASCII', 'ignore').decode('utf-8')
@@ -183,3 +184,21 @@ def matricular_usuario_pelo_nome_do_curso(driver, email, nome_curso, prefixo):
         print(f"❌ Erro ao matricular {email} no curso '{nome_curso}': {e}")
         raise e
 
+def atualizar_dados_certificados(driver, url, coluna_destino):
+    try:
+        driver.get(url)
+        time.sleep(2)
+        elemento = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//h3[contains(text(),'Destinatários:')]"))
+        )
+        texto = elemento.text
+        match = re.search(r'Destinatários:\D*(\d+)', texto)
+        if not match:
+            print("⚠️ Não foi possível encontrar o número de destinatários.")
+            return
+        total = int(match.group(1))
+        aba_total = conectar_planilha("Total")
+        aba_total.update(f"{coluna_destino}3", [[total]])
+
+    except Exception as e:
+        print(f"❌ Erro ao atualizar os dados de certificados: {e}")
